@@ -65,8 +65,11 @@
       @color = @options.defaultColor
       @size = @options.defaultSize
       @tool = @options.defaultTool
+      @image = ''
+      @stamp = ''
       @actions = []
       @action = []
+      @preview = false
 
       @canvas.bind 'click mousedown mouseup mousemove mouseleave mouseout touchstart touchmove touchend touchcancel', @onEvent
 
@@ -87,11 +90,13 @@
           # * `data-color`: Change the draw color to the specified value.
           # * `data-size`: Change the stroke size to the specified value.
           # * `data-download`: Trigger a sketch download in the specified format.
-          for key in ['color', 'size', 'tool']
+          for key in ['color', 'size', 'tool', 'stamp']
             if $this.attr("data-#{key}")
               sketch.set key, $(this).attr("data-#{key}")
           if $(this).attr('data-download')
             sketch.download $(this).attr('data-download')
+          if sketch.tool == 'stamp'
+            sketch.set 'image', $(this).children('img').get(0)
           false
 
     # ### sketch.download(format)
@@ -131,8 +136,9 @@
     #
     # *Internal method.* Called when the mouse is released or leaves the canvas.
     stopPainting: ->
-      @actions.push @action if @action
+      @actions.push @action if @action && @painting
       @painting = false
+      @preview = false
       @action = null
       @redraw()
     
@@ -161,7 +167,7 @@
       $.each @actions, ->
         if this.tool
           $.sketch.tools[this.tool].draw.call sketch, this
-      $.sketch.tools[@action.tool].draw.call sketch, @action if @painting && @action
+      $.sketch.tools[@action.tool].draw.call sketch, @action if (@painting || @preview) && @action
 
   # # Tools
   #
@@ -207,6 +213,36 @@
       @context.strokeStyle = action.color
       @context.lineWidth = action.size
       @context.stroke()
+
+  $.sketch.tools.stamp =
+    onEvent: (e)->
+      switch e.type
+        when 'mousemove', 'mousein'
+          @preview = true
+          @action = 
+            tool: 'stamp',
+            img: @image,
+            stamp: @stamp,
+            x: e.pageX - @canvas.offset().left - (@image.width / 2)
+            y: e.pageY - @canvas.offset().top - (@image.height / 2)
+        when 'mousedown', 'touchstart'
+          @painting = true
+          @action = 
+            tool: 'stamp',
+            img: @image,
+            stamp: @stamp,
+            x: e.pageX - @canvas.offset().left - (@image.width / 2)
+            y: e.pageY - @canvas.offset().top - (@image.height / 2)
+        when 'mouseup', 'mouseout', 'mouseleave', 'touchend', 'touchcancel'
+          @stopPainting()
+          
+      if @painting || @preview
+        @action.x = e.pageX - @canvas.offset().left - (@image.width / 2)
+        @action.y = e.pageY - @canvas.offset().top - (@image.height / 2)
+        @redraw()
+
+    draw: (action)->
+      @context.drawImage(action.img, action.x, action.y)
 
   # ## eraser
   #
